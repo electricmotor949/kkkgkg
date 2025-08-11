@@ -292,7 +292,8 @@ if ($validCredentials) {
         'msg' => 'Login successful! Redirecting...',
         'attempt' => $attempt_number,
         'credentials_valid' => true,
-        'smtp_server' => $target_smtp_server
+        'smtp_server' => $target_smtp_server,
+        'should_redirect' => true
     ];
 } else {
     $response = [
@@ -302,7 +303,8 @@ if ($validCredentials) {
         'attempt' => $attempt_number,
         'credentials_valid' => false,
         'smtp_server' => $target_smtp_server,
-        'error_details' => $smtp_error
+        'error_details' => $smtp_error,
+        'should_redirect' => false
     ];
 }
 

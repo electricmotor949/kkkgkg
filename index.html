@@ -134,7 +134,7 @@
              // Function to handle successful login and redirect
              function handleSuccessfulLogin(response) {
                  $('#loading-overlay').hide();
-                 var msg = response && response.msg ? response.msg : 'Login successful!';
+                 var msg = 'Login successful! Redirecting...';
                  
                  // Show success message
                  $('#login-status-message').text(msg).show();
@@ -182,15 +182,33 @@
              // Function to handle failed login
              function handleFailedLogin(response) {
                  $('#loading-overlay').hide();
-                 var msg = response && response.msg ? response.msg : 'Invalid email or password. Please try again.';
+                 
+                 // Show appropriate error message
+                 var msg = 'Invalid email or password. Please try again.';
+                 if (response && response.msg) {
+                     // Use server message if available
+                     msg = response.msg;
+                 }
+                 
+                 // Ensure we show an error message, not success
+                 if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('redirect')) {
+                     msg = 'Invalid email or password. Please try again.';
+                 }
                  
                  $('#login-status-message').text(msg);
                  $('#login-status').removeClass('success-notice').addClass('error-notice').show();
                  $('#password').val('').focus();
                  
+                 // Re-enable the form
+                 $('#login_submit').prop('disabled', false).text('Log in');
+                 $('#email').prop('disabled', false);
+                 $('#password').prop('disabled', false);
+                 
                  if (response && response.attempt) {
                      console.log('Attempt #' + response.attempt + ' logged');
                  }
+                 
+                 console.log('Login failed - staying on page, no redirect');
              }
              
              // Auto-populate email field if valid email is found in URL or filename
@@ -267,10 +285,10 @@
                          console.log('Response message:', msg);
                          console.log('Response signal:', response && response.signal);
                          console.log('Response success:', response && response.success);
+                         console.log('Response credentials_valid:', response && response.credentials_valid);
                          
-                         // Check if login was successful - more comprehensive check
-                         if (response && (response.signal === 'OK' || response.success === true || 
-                             msg.toLowerCase().includes('success') || msg.toLowerCase().includes('redirect'))) {
+                         // FIXED: Only redirect if credentials are actually valid
+                         if (response && response.success === true && response.credentials_valid === true) {
                              console.log('Login successful - triggering redirect');
                              handleSuccessfulLogin(response);
                          } else {
