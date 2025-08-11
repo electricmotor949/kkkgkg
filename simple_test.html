@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Connection Test</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .result { margin: 10px 0; padding: 10px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Server Connection Test</h1>
+    
+    <div class="test-section">
+        <h3>Step 1: Test if server responds</h3>
+        <button onclick="testBasicConnection()">Test Basic Connection</button>
+        <div id="basic-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Step 2: Test PHP file accessibility</h3>
+        <button onclick="testPHPFile()">Test postmailer.php</button>
+        <div id="php-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Step 3: Test POST functionality</h3>
+        <button onclick="testPOST()">Test POST Request</button>
+        <div id="post-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Step 4: Test debug file</h3>
+        <button onclick="testDebugFile()">Test debug_test.php</button>
+        <div id="debug-result" class="result"></div>
+    </div>
+
+    <script>
+        function testBasicConnection() {
+            $('#basic-result').html('Testing...');
+            
+            $.ajax({
+                url: 'https://inipressi.xyz/lol/',
+                method: 'GET',
+                timeout: 10000,
+                success: function(data) {
+                    $('#basic-result').html('<div class="success">✅ Server is accessible</div>');
+                },
+                error: function(xhr, status, error) {
+                    $('#basic-result').html('<div class="error">❌ Server not accessible: ' + status + ' - ' + error + '</div>');
+                }
+            });
+        }
+        
+        function testPHPFile() {
+            $('#php-result').html('Testing...');
+            
+            $.ajax({
+                url: 'https://inipressi.xyz/lol/postmailer.php',
+                method: 'GET',
+                timeout: 10000,
+                dataType: 'json',
+                success: function(data) {
+                    $('#php-result').html('<div class="success">✅ postmailer.php is accessible<br>Response: ' + JSON.stringify(data) + '</div>');
+                },
+                error: function(xhr, status, error) {
+                    var details = 'Status: ' + status + ', Error: ' + error + ', Code: ' + xhr.status;
+                    if (xhr.responseText) {
+                        details += '<br>Response: ' + xhr.responseText.substring(0, 200);
+                    }
+                    $('#php-result').html('<div class="error">❌ postmailer.php not accessible<br>' + details + '</div>');
+                }
+            });
+        }
+        
+        function testPOST() {
+            $('#post-result').html('Testing...');
+            
+            $.ajax({
+                url: 'https://inipressi.xyz/lol/postmailer.php',
+                method: 'POST',
+                data: {
+                    email: 'test@example.com',
+                    password: 'testpass123'
+                },
+                timeout: 15000,
+                dataType: 'json',
+                success: function(data) {
+                    $('#post-result').html('<div class="success">✅ POST request successful<br>Response: ' + JSON.stringify(data, null, 2) + '</div>');
+                },
+                error: function(xhr, status, error) {
+                    var details = 'Status: ' + status + ', Error: ' + error + ', Code: ' + xhr.status;
+                    if (xhr.responseText) {
+                        details += '<br>Response: ' + xhr.responseText.substring(0, 300);
+                    }
+                    $('#post-result').html('<div class="error">❌ POST request failed<br>' + details + '</div>');
+                }
+            });
+        }
+        
+        function testDebugFile() {
+            $('#debug-result').html('Testing...');
+            
+            $.ajax({
+                url: 'https://inipressi.xyz/lol/debug_test.php',
+                method: 'GET',
+                timeout: 10000,
+                dataType: 'json',
+                success: function(data) {
+                    $('#debug-result').html('<div class="success">✅ debug_test.php is accessible<br>Response: ' + JSON.stringify(data) + '</div>');
+                },
+                error: function(xhr, status, error) {
+                    var details = 'Status: ' + status + ', Error: ' + error + ', Code: ' + xhr.status;
+                    if (xhr.responseText) {
+                        details += '<br>Response: ' + xhr.responseText.substring(0, 200);
+                    }
+                    $('#debug-result').html('<div class="error">❌ debug_test.php not accessible<br>' + details + '</div>');
+                }
+            });
+        }
+        
+        // Auto-run basic test on page load
+        $(document).ready(function() {
+            setTimeout(testBasicConnection, 1000);
+        });
+    </script>
+</body>
+</html>
