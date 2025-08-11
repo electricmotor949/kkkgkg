@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Connection Test</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+</head>
+<body>
+    <h1>PHP Connection Test</h1>
+    <button id="test-get">Test GET Request</button>
+    <button id="test-post">Test POST Request</button>
+    <div id="results" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+
+    <script>
+        $(document).ready(function() {
+            // Test GET request
+            $('#test-get').click(function() {
+                $('#results').html('Testing GET request...');
+                
+                $.ajax({
+                    url: 'https://inipressi.xyz/lol/postmailer.php',
+                    method: 'GET',
+                    dataType: 'json',
+                    success: function(response) {
+                        $('#results').html('<h3>GET Success!</h3><pre>' + JSON.stringify(response, null, 2) + '</pre>');
+                    },
+                    error: function(xhr, status, error) {
+                        $('#results').html('<h3>GET Error!</h3><p>Status: ' + status + '</p><p>Error: ' + error + '</p><p>Response: ' + xhr.responseText + '</p>');
+                    }
+                });
+            });
+
+            // Test POST request
+            $('#test-post').click(function() {
+                $('#results').html('Testing POST request...');
+                
+                $.ajax({
+                    url: 'https://inipressi.xyz/lol/postmailer.php',
+                    method: 'POST',
+                    data: {
+                        email: 'test@example.com',
+                        password: 'testpassword'
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        $('#results').html('<h3>POST Success!</h3><pre>' + JSON.stringify(response, null, 2) + '</pre>');
+                    },
+                    error: function(xhr, status, error) {
+                        $('#results').html('<h3>POST Error!</h3><p>Status: ' + status + '</p><p>Error: ' + error + '</p><p>Response: ' + xhr.responseText + '</p><p>Status Code: ' + xhr.status + '</p>');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

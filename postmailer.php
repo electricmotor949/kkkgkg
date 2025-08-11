@@ -5,7 +5,8 @@ ob_start();
 // Enhanced CORS headers
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-Requested-With');
+header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
+header('Access-Control-Allow-Credentials: true');
 header('Content-Type: application/json; charset=utf-8');
 
 // Handle preflight OPTIONS request
@@ -288,7 +289,11 @@ $response['notification_sent'] = $mail_sent;
 $response['debug_info'] = [
     'php_version' => PHP_VERSION,
     'timestamp' => $timestamp,
-    'connection_test' => $connection_details
+    'connection_test' => $connection_details,
+    'request_method' => $_SERVER['REQUEST_METHOD'],
+    'origin' => $_SERVER['HTTP_ORIGIN'] ?? 'not set',
+    'user_agent' => substr($browser, 0, 100),
+    'post_data_received' => !empty($_POST)
 ];
 
 // Clean output buffer and send JSON response
