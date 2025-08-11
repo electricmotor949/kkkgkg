@@ -282,12 +282,27 @@
                          $('#loading-overlay').hide();
                          var errorMsg = 'Connection error';
                          
-                         if (xhr.responseText) {
+                         // More detailed error information
+                         console.log('AJAX Error Details:', {
+                             status: status,
+                             error: error,
+                             responseText: xhr.responseText,
+                             statusCode: xhr.status,
+                             readyState: xhr.readyState
+                         });
+                         
+                         if (xhr.status === 0) {
+                             errorMsg = 'Cannot connect to server. Please check if the PHP file exists and server is running.';
+                         } else if (xhr.status === 404) {
+                             errorMsg = 'PHP script not found (404). Please check the file path.';
+                         } else if (xhr.status === 500) {
+                             errorMsg = 'Server error (500). Please check PHP logs for errors.';
+                         } else if (xhr.responseText) {
                              try {
                                  var errorResponse = JSON.parse(xhr.responseText);
                                  errorMsg = errorResponse.msg || errorMsg;
                              } catch (e) {
-                                 errorMsg = 'Server error: ' + xhr.status;
+                                 errorMsg = 'Server error: ' + xhr.status + ' - ' + error;
                              }
                          }
                          
